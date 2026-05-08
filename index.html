@@ -643,6 +643,11 @@ main { max-width:1100px; margin:0 auto; padding:28px 20px 80px; }
 
 <script>
 // ═══════════════════════════════════════════════
+// ANTHROPIC API KEY — vlož svůj klíč zde
+// ═══════════════════════════════════════════════
+const ANTHROPIC_API_KEY = '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';
+
+// ═══════════════════════════════════════════════
 // CATEGORIES — dynamic, saved in localStorage
 // ═══════════════════════════════════════════════
 const DEFAULT_CATEGORIES = [
@@ -1304,43 +1309,64 @@ async function parseReceiptWithAI() {
   const ocrEl = document.getElementById('ocr-result');
   ocrEl.style.display='block'; ocrEl.textContent='AI analyzuje účtenku…';
 
+  // Detect image type from base64 header stored separately
+  const mediaType = uploadedImageBase64.startsWith('/9j') ? 'image/jpeg' : 'image/png';
+
   try {
+    const catIds = CATEGORIES.map(c=>c.id).join(', ');
     const resp = await fetch('https://api.anthropic.com/v1/messages',{
       method:'POST',
       headers:{
-  'Content-Type':'application/json',
-  'x-api-key':'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',
-  'anthropic-version':'2023-06-01',
-  'anthropic-dangerous-direct-browser-access':'true'
-},
+        'Content-Type':'application/json',
+        'x-api-key': ANTHROPIC_API_KEY,
+        'anthropic-version':'2023-06-01',
+        'anthropic-dangerous-direct-browser-access':'true'
+      },
       body:JSON.stringify({
         model:'claude-sonnet-4-20250514',
-        max_tokens:1000,
+        max_tokens:1500,
         messages:[{
           role:'user',
           content:[
-            {type:'image',source:{type:'base64',media_type:'image/jpeg',data:uploadedImageBase64}},
-            {type:'text',text:`Analyzuj tuto účtenku a vrať JSON POUZE bez markdown. Formát:
-{"shop":"název obchodu","total":číslo,"date":"YYYY-MM-DD nebo null","items":[{"name":"název","price":číslo,"cat":"id kategorie"}]}
-Kategorie IDs: potraviny, drogerie, detske, sladkosti, alkohol, cigarety, pohonne, obleceni, restaurace, elektronika, zdravi, domacnost, sport, ostatni
-Pokud datum na účtence není, použij null. Buď přesný a vrať jen JSON.`}
+            {type:'image',source:{type:'base64',media_type:mediaType,data:uploadedImageBase64}},
+            {type:'text',text:`Analyzuj tuto účtenku a vrať JSON POUZE bez markdown, bez backticks, jen čistý JSON objekt.
+Formát: {"shop":"název obchodu","total":číslo,"date":"YYYY-MM-DD nebo null","items":[{"name":"název položky","price":číslo,"cat":"id kategorie"}]}
+Dostupné kategorie IDs: ${catIds}
+Pravidla: datum formát YYYY-MM-DD, pokud chybí použij null. Ceny jako čísla bez měny. Vrať JEN JSON bez jakéhokoliv textu navíc.`}
           ]
         }]
       })
     });
+
     const data = await resp.json();
-    const text = data.content?.map(b=>b.text||'').join('');
-    ocrEl.textContent = 'Rozpoznáno: ' + text.substring(0,200)+'…';
-    const clean = text.replace(/```json|```/g,'').trim();
-    const parsed = JSON.parse(clean);
+
+    // Robust response extraction
+    if (data.error) {
+      throw new Error(data.error.message || 'API chyba');
+    }
+
+    const blocks = data.content || [];
+    let text = '';
+    for (const block of blocks) {
+      if (block.type === 'text') text += block.text;
+    }
+
+    if (!text) throw new Error('Prázdná odpověď od AI');
+
+    ocrEl.textContent = 'Rozpoznáno: ' + text.substring(0,300);
+
+    // Extract JSON — handle possible surrounding text
+    const jsonMatch = text.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) throw new Error('AI nevrátila validní JSON');
+    const parsed = JSON.parse(jsonMatch[0]);
 
     if (parsed.shop) document.getElementById('f-name').value = parsed.shop;
     if (parsed.total) document.getElementById('f-total').value = parsed.total;
-    if (parsed.date) document.getElementById('f-date').value = parsed.date;
+    if (parsed.date && parsed.date !== 'null') document.getElementById('f-date').value = parsed.date;
 
     document.getElementById('items-list').innerHTML='';
     if (parsed.items && parsed.items.length) {
-      parsed.items.forEach(i => addItemRow(i.name, i.price, i.cat));
+      parsed.items.forEach(i => addItemRow(i.name||'', i.price||0, i.cat||'ostatni'));
     }
     showToast('Účtenka rozpoznána ✓','success');
   } catch(e) {
