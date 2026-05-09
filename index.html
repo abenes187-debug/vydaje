@@ -12,14 +12,14 @@
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
   import { getFirestore, collection, addDoc, getDocs, updateDoc, deleteDoc, doc, onSnapshot, query, orderBy } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
-const firebaseConfig = {
+  const firebaseConfig = {
   apiKey: "AIzaSyDA7mpifZoMD4W1dX4664XnOtGxFJjrstg",
   authDomain: "vydaje-1b4d9.firebaseapp.com",
   projectId: "vydaje-1b4d9",
   storageBucket: "vydaje-1b4d9.firebasestorage.app",
   messagingSenderId: "196310932404",
   appId: "1:196310932404:web:05d60ca6df85974791b0e1"
-};
+  };
 
   const app = initializeApp(firebaseConfig);
   const db = getFirestore(app);
@@ -643,9 +643,9 @@ main { max-width:1100px; margin:0 auto; padding:28px 20px 80px; }
 
 <script>
 // ═══════════════════════════════════════════════
-// ANTHROPIC API KEY — vlož svůj klíč zde
+// ANTHROPIC API KEY — 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
 // ═══════════════════════════════════════════════
-const ANTHROPIC_API_KEY = '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';
+const ANTHROPIC_API_KEY = 'VAŠE_API_KEY';
 
 // ═══════════════════════════════════════════════
 // CATEGORIES — dynamic, saved in localStorage
@@ -1314,15 +1314,13 @@ async function parseReceiptWithAI() {
 
   try {
     const catIds = CATEGORIES.map(c=>c.id).join(', ');
-    const resp = await fetch('https://api.anthropic.com/v1/messages',{
+    const resp = await fetch('https://vydaje-proxy.abenes187.workers.dev/',{
       method:'POST',
       headers:{
         'Content-Type':'application/json',
-        'x-api-key': ANTHROPIC_API_KEY,
-        'anthropic-version':'2023-06-01',
-        'anthropic-dangerous-direct-browser-access':'true'
       },
       body:JSON.stringify({
+        apiKey: ANTHROPIC_API_KEY,
         model:'claude-sonnet-4-20250514',
         max_tokens:1500,
         messages:[{
