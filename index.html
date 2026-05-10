@@ -6,7 +6,6 @@
 <title>Výdaje · Antonín & Týna</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 
 <!-- Firebase SDK -->
 <script type="module">
@@ -569,7 +568,6 @@ main { max-width:1100px; margin:0 auto; padding:28px 20px 80px; }
       <p style="font-size:.83rem;color:var(--text2);margin-bottom:16px;line-height:1.6">Data jsou uložena ve Firebase, ale doporučujeme pravidelně stahovat zálohu.</p>
       <button class="backup-btn" onclick="exportJSON()">📥 Stáhnout zálohu (JSON)</button>
       <button class="backup-btn" onclick="exportCSV()">📊 Stáhnout zálohu (CSV)</button>
-      <button class="backup-btn" onclick="exportExcel()" style="color:var(--green);border-color:var(--green)">📊 Stáhnout Excel (XLSX)</button>
       <button class="backup-btn" onclick="importJSON()">📤 Nahrát zálohu (JSON)</button>
       <input type="file" id="import-file" accept=".json" style="display:none" onchange="handleImport(event)">
     </div>
@@ -942,17 +940,13 @@ function renderDashboard() {
   document.getElementById('stat-tyna').textContent = fmtMoney(tyna);
   document.getElementById('stat-tyna-count').textContent = filtered.filter(e=>e.user==='Týna').length + ' nákupů';
 
-  // Category bars — každá položka do své kategorie, bez položek → ostatni
+  // Category bars
   const catMap = {};
   filtered.forEach(e => {
-    if (e.items && e.items.length) {
-      e.items.forEach(i => {
-        const cat = i.cat || 'ostatni';
-        catMap[cat] = (catMap[cat]||0) + Number(i.price||0);
-      });
-    } else {
-      catMap['ostatni'] = (catMap['ostatni']||0) + Number(e.total||0);
-    }
+    const items = e.items && e.items.length ? e.items : [{price:e.total, cat: guessCategory(e.name+' '+e.note)}];
+    items.forEach(i => {
+      catMap[i.cat] = (catMap[i.cat]||0) + Number(i.price);
+    });
   });
   const maxVal = Math.max(...Object.values(catMap), 1);
   const sorted = Object.entries(catMap).sort((a,b)=>b[1]-a[1]);
@@ -1090,11 +1084,8 @@ function renderAnalytics() {
   // Budget tracking
   const catMap = {};
   monthExp.forEach(e=>{
-    if (e.items && e.items.length) {
-      e.items.forEach(i=>{ const cat=i.cat||'ostatni'; catMap[cat]=(catMap[cat]||0)+Number(i.price||0); });
-    } else {
-      catMap['ostatni']=(catMap['ostatni']||0)+Number(e.total||0);
-    }
+    const items = e.items&&e.items.length?e.items:[{price:e.total,cat:guessCategory(e.name)}];
+    items.forEach(i=>{catMap[i.cat]=(catMap[i.cat]||0)+Number(i.price);});
   });
   document.getElementById('budget-track').innerHTML = CATEGORIES.filter(c=>c.id!=='ostatni').map(c=>{
     const spent = catMap[c.id]||0;
@@ -1327,9 +1318,6 @@ async function parseReceiptWithAI() {
       method:'POST',
       headers:{
         'Content-Type':'application/json',
-        'x-api-key': ANTHROPIC_API_KEY,
-        'anthropic-version':'2023-06-01',
-        'anthropic-dangerous-direct-browser-access':'true'
       },
       body:JSON.stringify({
         model:'claude-sonnet-4-20250514',
@@ -1402,62 +1390,6 @@ function exportCSV() {
   const csv = rows.map(r=>r.map(c=>'"'+String(c).replace(/"/g,'""')+'"').join(',')).join('\n');
   download('vydaje-'+new Date().toISOString().split('T')[0]+'.csv', '\ufeff'+csv, 'text/csv');
   showToast('CSV záloha stažena ✓','success');
-}
-
-function exportExcel() {
-  // Build flat rows — one row per item, or one row per expense if no items
-  const header = ['Datum','Obchod','Uživatel','Položka','Kategorie','Cena (Kč)','Celkem nákup (Kč)','Poznámka'];
-  const rows = [header];
-  [...expenses].sort((a,b)=>new Date(a.date)-new Date(b.date)).forEach(e => {
-    if (e.items && e.items.length) {
-      e.items.forEach(i => {
-        const cat = CATEGORIES.find(c=>c.id===i.cat);
-        rows.push([
-          e.date, e.name, e.user,
-          i.name||'',
-          cat ? cat.name : (i.cat||'Ostatní'),
-          Number(i.price||0),
-          Number(e.total||0),
-          e.note||''
-        ]);
-      });
-    } else {
-      rows.push([e.date, e.name, e.user, '—', 'Ostatní', Number(e.total||0), Number(e.total||0), e.note||'']);
-    }
-  });
-
-  // Use SheetJS if available, else fallback to CSV
-  if (typeof XLSX !== 'undefined') {
-    const wb = XLSX.utils.book_new();
-    const ws = XLSX.utils.aoa_to_sheet(rows);
-    // Column widths
-    ws['!cols'] = [12,20,10,25,18,14,18,20].map(w=>({wch:w}));
-    XLSX.utils.book_append_sheet(wb, ws, 'Výdaje');
-
-    // Summary sheet
-    const catSums = {};
-    expenses.forEach(e=>{
-      if(e.items&&e.items.length){e.items.forEach(i=>{const c=i.cat||'ostatni';catSums[c]=(catSums[c]||0)+Number(i.price||0);});}
-      else{catSums['ostatni']=(catSums['ostatni']||0)+Number(e.total||0);}
-    });
-    const sumRows = [['Kategorie','Ikona','Celkem (Kč)']];
-    Object.entries(catSums).sort((a,b)=>b[1]-a[1]).forEach(([id,val])=>{
-      const cat = CATEGORIES.find(c=>c.id===id)||{name:id,icon:'📦'};
-      sumRows.push([cat.name, cat.icon, Number(val.toFixed(2))]);
-    });
-    sumRows.push(['','CELKEM',Number(expenses.reduce((s,e)=>s+Number(e.total||0),0).toFixed(2))]);
-    const ws2 = XLSX.utils.aoa_to_sheet(sumRows);
-    ws2['!cols'] = [{wch:22},{wch:6},{wch:14}];
-    XLSX.utils.book_append_sheet(wb, ws2, 'Přehled kategorií');
-
-    XLSX.writeFile(wb, 'vydaje-'+new Date().toISOString().split('T')[0]+'.xlsx');
-    showToast('Excel stažen ✓','success');
-  } else {
-    // Fallback to CSV if SheetJS not loaded
-    const csv = rows.map(r=>r.map(c=>'"'+String(c).replace(/"/g,'""')+'"').join(',')).join('\n');
-    download('vydaje-'+new Date().toISOString().split('T')[0]+'.csv', '\ufeff'+csv, 'text/csv');
-    showToast('Staženo jako CSV (Excel nedostupný)','success');
-  }
 }
 
 function importJSON() { document.getElementById('import-file').click(); }
