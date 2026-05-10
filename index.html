@@ -155,8 +155,22 @@ main { max-width:1100px; margin:0 auto; padding:28px 20px 80px; }
 
 /* ─── CATEGORY BARS ─── */
 .cat-bars { background:var(--bg2); border:1px solid var(--border); border-radius:var(--radius); padding:20px; margin-bottom:28px; }
-.cat-row { display:flex; align-items:center; gap:12px; padding:8px 0; border-bottom:1px solid var(--border); }
+.cat-row { display:flex; align-items:center; gap:12px; padding:10px 0; border-bottom:1px solid var(--border); cursor:pointer; transition:.15s; border-radius:0; }
 .cat-row:last-child { border-bottom:none; }
+.cat-row:hover { background:rgba(255,255,255,.03); padding-left:6px; }
+.cat-row .cat-arrow { font-size:.75rem; color:var(--text3); flex-shrink:0; transition:.15s; }
+.cat-row:hover .cat-arrow { color:var(--accent); }
+
+/* ─── CATEGORY DETAIL MODAL ─── */
+#cat-detail-modal .modal { max-width:600px; }
+.cat-detail-item { background:var(--bg3); border:1px solid var(--border); border-radius:10px; padding:12px 14px; margin-bottom:8px; }
+.cat-detail-item-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:6px; }
+.cat-detail-item-name { font-weight:500; font-size:.92rem; }
+.cat-detail-item-meta { font-size:.75rem; color:var(--text3); }
+.cat-detail-item-price { font-weight:700; font-size:1rem; color:var(--accent); }
+.cat-detail-edit { display:none; margin-top:10px; padding-top:10px; border-top:1px solid var(--border); }
+.cat-detail-edit.open { display:block; }
+.cat-detail-edit-grid { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:10px; }
 .cat-icon { font-size:1.3rem; width:32px; text-align:center; flex-shrink:0; }
 .cat-name { flex:1; font-size:.88rem; }
 .cat-bar-wrap { width:130px; height:6px; background:var(--bg3); border-radius:3px; flex-shrink:0; }
@@ -220,11 +234,10 @@ main { max-width:1100px; margin:0 auto; padding:28px 20px 80px; }
 
 .items-section { margin-top:16px; }
 .items-title { font-size:.78rem; color:var(--text2); text-transform:uppercase; letter-spacing:.07em; margin-bottom:10px; }
-.item-row { display:grid; grid-template-columns:1fr auto; grid-template-rows:auto auto; gap:6px; margin-bottom:10px; background:var(--bg3); border:1px solid var(--border); border-radius:10px; padding:10px; }
-.item-row .item-name { grid-column:1; grid-row:1; }
-.item-row .item-price { grid-column:2; grid-row:1; width:90px; flex-shrink:0; }
-.item-row .item-cat { grid-column:1; grid-row:2; width:100%; }
-.item-row .btn-icon { grid-column:2; grid-row:2; width:34px; height:34px; justify-self:end; }
+.item-row { display:flex; gap:8px; align-items:center; margin-bottom:8px; }
+.item-row .form-input { flex:1; }
+.item-row .item-price { width:110px; flex-shrink:0; }
+.item-row .item-cat { width:140px; flex-shrink:0; }
 .btn-icon { width:34px; height:34px; border-radius:8px; border:1px solid var(--border); background:var(--bg3); color:var(--text2); cursor:pointer; font-size:1rem; display:flex; align-items:center; justify-content:center; transition:.15s; flex-shrink:0; }
 .btn-icon:hover { border-color:var(--red); color:var(--red); }
 .btn-add-item { background:transparent; border:1px dashed var(--border); border-radius:8px; padding:8px; font-family:inherit; color:var(--text3); cursor:pointer; font-size:.83rem; width:100%; transition:.15s; margin-top:4px; }
@@ -606,6 +619,18 @@ main { max-width:1100px; margin:0 auto; padding:28px 20px 80px; }
 <!-- TOAST -->
 <div class="toast" id="toast"></div>
 
+<!-- CATEGORY DETAIL MODAL -->
+<div class="modal-overlay" id="cat-detail-modal" onclick="if(event.target===this)closeCatDetail()">
+  <div class="modal" style="max-width:600px">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
+      <h2 style="margin:0" id="cat-detail-title">Kategorie</h2>
+      <button onclick="closeCatDetail()" style="background:none;border:none;color:var(--text2);font-size:1.4rem;cursor:pointer;line-height:1">×</button>
+    </div>
+    <div style="font-size:.82rem;color:var(--text3);margin-bottom:16px" id="cat-detail-total"></div>
+    <div id="cat-detail-list" style="max-height:65vh;overflow-y:auto;padding-right:4px"></div>
+  </div>
+</div>
+
 <!-- CATEGORY MODAL -->
 <div class="modal-overlay" id="cat-modal" onclick="if(event.target===this)closeCatModal()">
   <div class="modal" style="max-width:560px">
@@ -957,11 +982,12 @@ function renderDashboard() {
   else {
     catBars.innerHTML = sorted.map(([id,val]) => {
       const c = getCat(id);
-      return `<div class="cat-row">
+      return `<div class="cat-row" onclick="openCatDetail('${id}')">
         <span class="cat-icon">${c.icon}</span>
         <span class="cat-name">${c.name}</span>
         <div class="cat-bar-wrap"><div class="cat-bar" style="width:${(val/maxVal*100).toFixed(1)}%;background:${c.color}"></div></div>
         <span class="cat-amount">${fmtMoney(val)}</span>
+        <span class="cat-arrow">›</span>
       </div>`;
     }).join('');
   }
@@ -1178,10 +1204,10 @@ function addItemRow(name='', price='', cat='potraviny') {
   const row = document.createElement('div');
   row.className = 'item-row'; row.id = id;
   row.innerHTML = `
-    <input class="form-input item-name" placeholder="Název položky" value="${esc(name)}">
+    <input class="form-input" placeholder="Název položky" value="${esc(name)}">
     <input class="form-input item-price" type="number" step="0.01" placeholder="Kč" value="${price}">
     <select class="form-select item-cat">${CATEGORIES.map(c=>`<option value="${c.id}"${c.id===cat?' selected':''}>${c.icon} ${c.name}</option>`).join('')}</select>
-    <button class="btn-icon" onclick="document.getElementById('${id}').remove()" title="Smazat">✕</button>`;
+    <button class="btn-icon" onclick="document.getElementById('${id}').remove()">✕</button>`;
   document.getElementById('items-list').appendChild(row);
 }
 
@@ -1444,6 +1470,126 @@ function showToast(msg, type='') {
   t.classList.add('show');
   clearTimeout(toastTimer);
   toastTimer = setTimeout(()=>t.classList.remove('show'),3000);
+}
+
+// ═══════════════════════════════════════════════
+// CATEGORY DETAIL
+// ═══════════════════════════════════════════════
+function openCatDetail(catId) {
+  const cat = getCat(catId);
+  document.getElementById('cat-detail-title').textContent = cat.icon + ' ' + cat.name;
+
+  // Gather all items in this category across all expenses (filtered by current period)
+  const filtered = filterByPeriod(expenses, currentPeriod);
+  const items = [];
+  filtered.forEach(e => {
+    if (e.items && e.items.length) {
+      e.items.forEach((it, idx) => {
+        if ((it.cat || 'ostatni') === catId) {
+          items.push({ expenseId: e.id, itemIdx: idx, expenseName: e.name, expenseDate: e.date, expenseUser: e.user, ...it });
+        }
+      });
+    } else if (catId === 'ostatni') {
+      items.push({ expenseId: e.id, itemIdx: -1, expenseName: e.name, expenseDate: e.date, expenseUser: e.user, name: e.name, price: e.total, cat: 'ostatni' });
+    }
+  });
+
+  // Sort by date desc
+  items.sort((a,b) => new Date(b.expenseDate) - new Date(a.expenseDate));
+
+  const total = items.reduce((s,i) => s + Number(i.price||0), 0);
+  document.getElementById('cat-detail-total').textContent = items.length + ' položek · celkem ' + fmtMoney(total);
+
+  const list = document.getElementById('cat-detail-list');
+  if (!items.length) {
+    list.innerHTML = '<div class="empty"><div class="empty-icon">' + cat.icon + '</div><p>Žádné položky</p></div>';
+  } else {
+    list.innerHTML = items.map((it, i) => {
+      const uid = 'cdi-' + i;
+      const catOptions = CATEGORIES.map(c => `<option value="${c.id}"${c.id===it.cat?' selected':''}>${c.icon} ${c.name}</option>`).join('');
+      return `<div class="cat-detail-item">
+        <div class="cat-detail-item-header">
+          <div>
+            <div class="cat-detail-item-name">${esc(it.name||it.expenseName)}</div>
+            <div class="cat-detail-item-meta">${it.expenseDate} · ${it.expenseName} · <span class="tag ${it.expenseUser==='Antonín'?'tag-antonin':'tag-tyna'}">${it.expenseUser}</span></div>
+          </div>
+          <div style="display:flex;align-items:center;gap:10px">
+            <span class="cat-detail-item-price">${fmtMoney(it.price)}</span>
+            ${it.itemIdx >= 0 ? `<button onclick="toggleCatDetailEdit('${uid}')" style="background:transparent;border:1px solid var(--border);border-radius:6px;padding:4px 10px;color:var(--text2);font-family:inherit;font-size:.75rem;cursor:pointer">✏️ Upravit</button>` : ''}
+          </div>
+        </div>
+        ${it.itemIdx >= 0 ? `<div class="cat-detail-edit" id="${uid}">
+          <div class="cat-detail-edit-grid">
+            <div class="form-group">
+              <label class="form-label">Název položky</label>
+              <input class="form-input" id="${uid}-name" value="${esc(it.name||'')}">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Cena (Kč)</label>
+              <input class="form-input" type="number" id="${uid}-price" value="${it.price||0}">
+            </div>
+            <div class="form-group" style="grid-column:1/-1">
+              <label class="form-label">Kategorie</label>
+              <select class="form-select" id="${uid}-cat">${catOptions}</select>
+            </div>
+          </div>
+          <div style="display:flex;gap:8px">
+            <button class="btn-save" onclick="saveCatDetailItem('${it.expenseId}',${it.itemIdx},'${uid}')">Uložit</button>
+            <button class="btn-danger" onclick="deleteCatDetailItem('${it.expenseId}',${it.itemIdx},'${uid}')">Smazat položku</button>
+          </div>
+        </div>` : ''}
+      </div>`;
+    }).join('');
+  }
+
+  document.getElementById('cat-detail-modal').classList.add('open');
+}
+
+function closeCatDetail() {
+  document.getElementById('cat-detail-modal').classList.remove('open');
+}
+
+function toggleCatDetailEdit(uid) {
+  document.getElementById(uid).classList.toggle('open');
+}
+
+async function saveCatDetailItem(expenseId, itemIdx, uid) {
+  const name = document.getElementById(uid+'-name').value.trim();
+  const price = parseFloat(document.getElementById(uid+'-price').value)||0;
+  const cat = document.getElementById(uid+'-cat').value;
+
+  const expense = expenses.find(e=>e.id===expenseId);
+  if (!expense) return;
+  expense.items[itemIdx] = { ...expense.items[itemIdx], name, price, cat };
+
+  if (isFirebaseOk && !expenseId.startsWith('local-')) {
+    try {
+      const { doc, updateDoc } = window._fbFns;
+      await updateDoc(doc(window._db,'expenses',expenseId), { items: expense.items });
+    } catch(e) { console.error(e); }
+  }
+  renderAll();
+  // Refresh the modal with updated data — find current catId from select
+  const catId = document.getElementById(uid+'-cat').value;
+  closeCatDetail();
+  showToast('Položka upravena ✓','success');
+}
+
+async function deleteCatDetailItem(expenseId, itemIdx, uid) {
+  if (!confirm('Smazat tuto položku?')) return;
+  const expense = expenses.find(e=>e.id===expenseId);
+  if (!expense) return;
+  expense.items.splice(itemIdx, 1);
+
+  if (isFirebaseOk && !expenseId.startsWith('local-')) {
+    try {
+      const { doc, updateDoc } = window._fbFns;
+      await updateDoc(doc(window._db,'expenses',expenseId), { items: expense.items });
+    } catch(e) { console.error(e); }
+  }
+  renderAll();
+  closeCatDetail();
+  showToast('Položka smazána','success');
 }
 
 // ═══════════════════════════════════════════════
